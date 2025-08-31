@@ -1,17 +1,21 @@
-// src/app/login/page.tsx
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import LoginForm from "@/components/LoginForm";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
 
-  // すでに保存済みならスキップ（いったんトップへ）
   useEffect(() => {
     const saved = localStorage.getItem("basic_pass");
-    if (saved) router.replace("/");
+    if (saved) {
+      setRedirecting(true);
+      router.replace("/");
+    }
   }, [router]);
+
+  if (redirecting) return null; // ← ここがポイント（描画しない）
 
   return (
     <main className="min-h-[60vh] flex items-center">
