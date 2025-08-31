@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { APIProvider, Map, Marker, InfoWindow } from '@vis.gl/react-google-maps';
 
 type Place = {
@@ -49,7 +50,8 @@ export default function GoogleMapView() {
 
   return (
     <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!}>
-      <div className="w-full h-[80vh]">
+      <div className="relative w-full h-[80vh]">
+        {/* 地図 */}
         <Map defaultZoom={12} defaultCenter={{ lat: 35.68, lng: 139.76 }} gestureHandling="greedy">
           {places.map((p, i) => (
             <Marker
@@ -60,7 +62,10 @@ export default function GoogleMapView() {
           ))}
 
           {active && (
-            <InfoWindow position={{ lat: active.lat, lng: active.lng }} onCloseClick={() => setActive(null)}>
+            <InfoWindow
+              position={{ lat: active.lat, lng: active.lng }}
+              onCloseClick={() => setActive(null)}
+            >
               <div className="p-1 max-w-64">
                 <div className="font-semibold">{active.name || '（名称未設定）'}</div>
                 {active.category && <div className="text-xs opacity-70 mb-1">{active.category}</div>}
@@ -79,7 +84,11 @@ export default function GoogleMapView() {
                 )}
 
                 {active.url && (
-                  <a className="text-blue-600 underline text-xs mt-1 inline-block" href={active.url} target="_blank">
+                  <a
+                    className="text-blue-600 underline text-xs mt-1 inline-block"
+                    href={active.url}
+                    target="_blank"
+                  >
                     Google Mapで開く
                   </a>
                 )}
@@ -87,6 +96,16 @@ export default function GoogleMapView() {
             </InfoWindow>
           )}
         </Map>
+
+        {/* 投稿フォームボタン */}
+        <div className="pointer-events-none absolute right-3 top-3 z-50">
+          <Link
+            href="/submit"
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            📝 投稿フォーム
+          </Link>
+        </div>
 
         {err && <div className="mt-2 text-sm text-red-600">/api/places 読み込み失敗: {err}</div>}
       </div>
