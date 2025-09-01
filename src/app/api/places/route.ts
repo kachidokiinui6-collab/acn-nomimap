@@ -22,10 +22,22 @@ function parseNameFromGoogleMapsUrl(url: string) {
 }
 
 // ここで一度だけ読む（ビルド時に埋め込み／Edgeでも安全）
-const SHEETS_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY ?? '';
-const SHEETS_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_ID ?? '';
-const SHEETS_NAME = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_SHEET_NAME ?? '';
-const SHEETS_RANGE = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_RANGE ?? 'A1:Z2000';
+const SHEETS_KEY =
+  process.env.GOOGLE_SHEETS_API_KEY ??
+  process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY ??
+  '';
+const SHEETS_ID =
+  process.env.GOOGLE_SHEETS_ID ??
+  process.env.NEXT_PUBLIC_GOOGLE_SHEETS_ID ??
+  '';
+const SHEETS_NAME =
+  process.env.GOOGLE_SHEETS_SHEET_NAME ??
+  process.env.NEXT_PUBLIC_GOOGLE_SHEETS_SHEET_NAME ??
+  '';
+const SHEETS_RANGE =
+  process.env.GOOGLE_SHEETS_RANGE ??
+  process.env.NEXT_PUBLIC_GOOGLE_SHEETS_RANGE ??
+  'A1:Z2000';
 
 export const revalidate = 60;
 

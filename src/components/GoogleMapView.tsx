@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { APIProvider, Map, Marker, InfoWindow } from '@vis.gl/react-google-maps';
+import { useEffect, useMemo, useState } from 'react';
+import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
+import PlaceDrawer from '@/components/place/PlaceDrawer';
+import SubmitFormButton from '@/components/ui/SubmitFormButton';
+import type { PlaceGroup, Review } from '@/components/place/PlaceCard';
 
 type Place = {
   name: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   category?: string;
   url?: string;
   detail?: {
@@ -27,87 +29,88 @@ type Place = {
 
 export default function GoogleMapView() {
   const [places, setPlaces] = useState<Place[]>([]);
-  const [active, setActive] = useState<Place | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [active, setActive] = useState<PlaceGroup | null>(null);
 
   useEffect(() => {
     (async () => {
-      try {
-        const res = await fetch('/api/places', { cache: 'no-store' });
-        const json = await res.json();
-        if (!res.ok) {
-          setErr(json?.detail || json?.error || 'failed to load places');
-          console.error('GET /api/places error:', json);
-          return;
-        }
-        setPlaces(json.places ?? []);
-      } catch (e: any) {
-        setErr(e?.message || 'network error');
-        console.error(e);
-      }
+      const res = await fetch('/api/places', { cache: 'no-store' });
+      const json = await res.json();
+      setPlaces(json.places ?? []);
     })();
   }, []);
 
+  function hasLatLng(p: Place): p is Place & { lat: number; lng: number } {
+    return typeof p.lat === 'number' && typeof p.lng === 'number';
+  }
+  const markers = useMemo(() => places.filter(hasLatLng), [places]);
+
+  function keyOf(p: Place) {
+    const pid = p.raw?.place_id || p.raw?.placeId || (p as any).place_id;
+    if (pid) return `pid:${pid}`;
+    return `${Number(p.lat).toFixed(5)},${Number(p.lng).toFixed(5)}:${(p.name || '').toLowerCase()}`;
+  }
+
+  function toGroup(seed: Place): PlaceGroup {
+    const k = keyOf(seed);
+    const siblings = places.filter(p => keyOf(p) === k);
+    const reviews: Review[] = siblings.map(p => ({
+      handlename: p.detail?.handlename,
+      rating: p.detail?.rating,
+      comment: p.detail?.comment,
+      visitDate: p.detail?.visitDate,
+      ...(p.detail ?? {}),
+    }));
+    const addr = seed.raw?.adress || seed.raw?.address;
+    return {
+      name: seed.name,
+      address: addr,
+      url: seed.url,
+      lat: seed.lat as number,
+      lng: seed.lng as number,
+      category: seed.category,
+      reviews,
+    };
+  }
+
+  // --- 色マップ（指定通り） ---
+  function categoryToColor(category?: string): 'blue' | 'yellow' | 'purple' | 'red' {
+    if (!category) return 'red';
+    if (category.includes('パーティ')) return 'blue';
+    if (category.includes('普段飲み')) return 'yellow';
+    if (category.includes('クライアント')) return 'purple';
+    if (category.includes('ミール')) return 'red';
+    return 'red';
+  }
+
   return (
     <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!}>
-      <div className="relative w-full h-[80vh]">
-        {/* 地図 */}
-        <Map defaultZoom={12} defaultCenter={{ lat: 35.68, lng: 139.76 }} gestureHandling="greedy">
-          {places.map((p, i) => (
-            <Marker
-              key={`${p.lat},${p.lng},${i}`}
-              position={{ lat: p.lat, lng: p.lng }}
-              onClick={() => setActive(p)}
-            />
-          ))}
+      <div className="relative h-[100dvh]">
+        <Map
+          defaultCenter={{ lat: 35.68, lng: 139.76 }}
+          defaultZoom={13}
+          gestureHandling="greedy"
+          disableDefaultUI
+        />
 
-          {active && (
-            <InfoWindow
-              position={{ lat: active.lat, lng: active.lng }}
-              onCloseClick={() => setActive(null)}
-            >
-              <div className="p-1 max-w-64">
-                <div className="font-semibold">{active.name || '（名称未設定）'}</div>
-                {active.category && <div className="text-xs opacity-70 mb-1">{active.category}</div>}
-
-                {active.detail?.genre && <div className="text-xs">ジャンル：{active.detail.genre}</div>}
-                {active.detail?.priceRange && <div className="text-xs">予算：{active.detail.priceRange}</div>}
-                {active.detail?.groupSize && <div className="text-xs">人数：{active.detail.groupSize}</div>}
-                {active.detail?.privateRoom && <div className="text-xs">個室：{active.detail.privateRoom}</div>}
-                {active.detail?.smoking && <div className="text-xs">喫煙：{active.detail.smoking}</div>}
-                {active.detail?.facilities && <div className="text-xs">設備：{active.detail.facilities}</div>}
-                {active.detail?.rating && <div className="text-xs">評価：{active.detail.rating}</div>}
-                {active.detail?.visitDate && <div className="text-xs">訪問：{active.detail.visitDate}</div>}
-                {active.detail?.handlename && <div className="text-xs">投稿：{active.detail.handlename}</div>}
-                {active.detail?.comment && (
-                  <div className="text-xs mt-1 whitespace-pre-wrap">{active.detail.comment}</div>
-                )}
-
-                {active.url && (
-                  <a
-                    className="text-blue-600 underline text-xs mt-1 inline-block"
-                    href={active.url}
-                    target="_blank"
-                  >
-                    Google Mapで開く
-                  </a>
-                )}
-              </div>
-            </InfoWindow>
-          )}
-        </Map>
-
-        {/* 投稿フォームボタン */}
+        {/* 投稿フォーム */}
         <div className="pointer-events-none absolute right-3 top-3 z-50">
-          <Link
-            href="/submit"
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            📝 投稿フォーム
-          </Link>
+          <SubmitFormButton className="pointer-events-auto" />
         </div>
 
-        {err && <div className="mt-2 text-sm text-red-600">/api/places 読み込み失敗: {err}</div>}
+        {/* マーカー */}
+        {markers.map((p) => (
+          <Marker
+            key={keyOf(p)}
+            position={{ lat: p.lat, lng: p.lng }}
+            onClick={() => setActive(toGroup(p))}
+            title={p.name}
+            icon={{
+              url: `https://maps.google.com/mapfiles/ms/icons/${categoryToColor(p.category)}-dot.png`,
+            }}
+          />
+        ))}
+
+        <PlaceDrawer open={!!active} place={active} onClose={() => setActive(null)} />
       </div>
     </APIProvider>
   );
