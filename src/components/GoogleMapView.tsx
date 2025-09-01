@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
 import PlaceDrawer from '@/components/place/PlaceDrawer';
 import SubmitFormButton from '@/components/ui/SubmitFormButton';
-import type { PlaceGroup, Review } from '@/components/place/PlaceCard';
+import type { PlaceGroup, Review } from '@/components/place/types';
 
 type Place = {
   name: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import type { PlaceGroup, Review } from '@/components/place/PlaceCard';
+import type { PlaceGroup, Review } from '@/components/place/types';
 import FancyStars from '@/components/place/FancyStars';
 
 type Props = {
@@ -79,7 +79,7 @@ function asNum(v: string | number | undefined): number | undefined {
 export default function PlaceDrawer({ open, place, onClose }: Props) {
   const [showMore, setShowMore] = useState(false);
 
-  // ★ フックは常に先頭で呼ぶ（place が null でも安全に計算）
+  // place が null でも安全にフックを評価
   const latest: Review | undefined = place?.reviews?.[0];
   const latestMeta = useMemo(() => toMeta(latest), [latest]);
 
@@ -103,17 +103,20 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
     latestMeta.genre,
   ]);
 
-  // ★ ここで早期 return（フックの後）
+  // ここで早期 return（フック評価の後）
   if (!open || !place) return null;
+
+  const address = place.address ?? place.adress ?? '';
+  const mapsHref =
+    place.url ||
+    (place.lat != null && place.lng != null
+      ? `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`
+      : undefined);
 
   return (
     <div className="fixed inset-0 z-50">
       {/* backdrop */}
-      <button
-        className="absolute inset-0 bg-black/40"
-        aria-label="close"
-        onClick={onClose}
-      />
+      <button className="absolute inset-0 bg-black/40" aria-label="close" onClick={onClose} />
 
       {/* bottom sheet */}
       <div className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl">
@@ -121,26 +124,19 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
         <div className="mb-2 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{place.name}</h3>
-            {(place.address ?? (place as any).adress) && (
-              <p className="text-sm text-gray-600">
-                {place.address ?? (place as any).adress}
-              </p>
-            )}
-            {place.url && (
+            {address && <p className="text-sm text-gray-600">{address}</p>}
+            {mapsHref && (
               <a
-                href={place.url}
+                href={mapsHref}
                 target="_blank"
-                rel="noreferrer"
+                rel="noreferrer noopener"
                 className="mt-1 inline-block text-sm text-blue-600 underline"
               >
                 Google マップを開く
               </a>
             )}
           </div>
-          <button
-            className="rounded-md bg-gray-100 px-3 py-1 text-sm"
-            onClick={onClose}
-          >
+          <button className="rounded-md bg-gray-100 px-3 py-1 text-sm" onClick={onClose}>
             閉じる
           </button>
         </div>
@@ -160,10 +156,8 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
             <div className="mb-1 flex flex-wrap items-center gap-2">
               {latestMeta.rating != null && (
                 <div className="flex items-center gap-2">
-                  <FancyStars rating={asNum(latestMeta.rating) ?? 0} />
-                  <span className="text-sm text-gray-600">
-                    {latestMeta.rating}
-                  </span>
+                  <FancyStars value={asNum(latestMeta.rating) ?? 0} size={16} />
+                  <span className="text-sm text-gray-600">{latestMeta.rating}</span>
                 </div>
               )}
               {(latestMeta.handlename || latestMeta.visitDate) && (
@@ -173,20 +167,13 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
                 </span>
               )}
             </div>
-            {latestMeta.comment && (
-              <p className="text-sm leading-relaxed text-gray-800">
-                {latestMeta.comment}
-              </p>
-            )}
+            {latestMeta.comment && <p className="text-sm leading-relaxed text-gray-800">{latestMeta.comment}</p>}
           </div>
         )}
 
         {/* 詳細トグル */}
         <div className="mt-3">
-          <button
-            className="text-sm text-blue-600 underline"
-            onClick={() => setShowMore(v => !v)}
-          >
+          <button className="text-sm text-blue-600 underline" onClick={() => setShowMore(v => !v)}>
             {showMore ? '詳細を閉じる' : '詳細を表示'}
           </button>
         </div>
@@ -214,7 +201,7 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     {m.rating != null && (
                       <div className="flex items-center gap-2">
-                        <FancyStars rating={asNum(m.rating) ?? 0} />
+                        <FancyStars value={asNum(m.rating) ?? 0} size={14} />
                         <span className="text-xs text-gray-600">{m.rating}</span>
                       </div>
                     )}
@@ -225,9 +212,7 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
                       </span>
                     )}
                   </div>
-                  {m.comment && (
-                    <p className="text-sm text-gray-700">{m.comment}</p>
-                  )}
+                  {m.comment && <p className="text-sm text-gray-700">{m.comment}</p>}
                 </div>
               );
             })}
