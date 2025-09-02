@@ -1,3 +1,4 @@
+// src/components/place/PlaceDrawer.tsx
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -6,8 +7,14 @@ import FancyStars from '@/components/place/FancyStars';
 
 type Props = {
   open: boolean;
-  place: PlaceGroup | null;
-  onClose: () => void;
+  /** 現行の prop */
+  place?: PlaceGroup | null;
+  /** 互換用（過去の呼び出しが group を渡している場合でも動かす） */
+  group?: PlaceGroup | null;
+  /** 既存の close ハンドラ（そのまま維持） */
+  onClose?: () => void;
+  /** Drawer系の一般的なAPIに合わせた開閉ハンドラ（追加） */
+  onOpenChange?: (open: boolean) => void;
 };
 
 /* ------------------- 小物コンポーネント ------------------- */
@@ -76,16 +83,23 @@ function asNum(v: string | number | undefined): number | undefined {
 }
 
 /* ------------------- 本体 ------------------- */
-export default function PlaceDrawer({ open, place, onClose }: Props) {
+export default function PlaceDrawer({
+  open,
+  place,
+  group, // 互換
+  onClose,
+  onOpenChange,
+}: Props) {
+  const current = place ?? group ?? null; // 互換レイヤ：どちらのpropでも受ける
   const [showMore, setShowMore] = useState(false);
 
   // place が null でも安全にフックを評価
-  const latest: Review | undefined = place?.reviews?.[0];
+  const latest: Review | undefined = current?.reviews?.[0];
   const latestMeta = useMemo(() => toMeta(latest), [latest]);
 
   const chips = useMemo(() => {
     const arr: string[] = [];
-    if (place?.category) arr.push(place.category); // 利用シーン
+    if (current?.category) arr.push(current.category); // 利用シーン
     if (latestMeta.priceRange) arr.push(`価格帯: ${latestMeta.priceRange}`);
     if (latestMeta.groupSize) arr.push(`人数: ${latestMeta.groupSize}`);
     if (latestMeta.privateRoom) arr.push(`個室: ${latestMeta.privateRoom}`);
@@ -94,7 +108,7 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
     if (latestMeta.genre) arr.push(latestMeta.genre);
     return arr;
   }, [
-    place?.category,
+    current?.category,
     latestMeta.priceRange,
     latestMeta.groupSize,
     latestMeta.privateRoom,
@@ -104,26 +118,32 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
   ]);
 
   // ここで早期 return（フック評価の後）
-  if (!open || !place) return null;
+  if (!open || !current) return null;
 
-  const address = place.address ?? place.adress ?? '';
+  const address = current.address ?? current.adress ?? '';
   const mapsHref =
-    place.url ||
-    (place.lat != null && place.lng != null
-      ? `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`
+    current.url ||
+    (current.lat != null && current.lng != null
+      ? `https://www.google.com/maps/search/?api=1&query=${current.lat},${current.lng}`
       : undefined);
+
+  const handleClose = () => {
+    // 呼び出し元との互換性のため両方を呼ぶ（あれば）
+    onOpenChange?.(false);
+    onClose?.();
+  };
 
   return (
     <div className="fixed inset-0 z-50">
       {/* backdrop */}
-      <button className="absolute inset-0 bg-black/40" aria-label="close" onClick={onClose} />
+      <button className="absolute inset-0 bg-black/40" aria-label="close" onClick={handleClose} />
 
       {/* bottom sheet */}
       <div className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl">
         {/* Header */}
         <div className="mb-2 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold">{place.name}</h3>
+            <h3 className="text-lg font-semibold">{current.name}</h3>
             {address && <p className="text-sm text-gray-600">{address}</p>}
             {mapsHref && (
               <a
@@ -136,7 +156,7 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
               </a>
             )}
           </div>
-          <button className="rounded-md bg-gray-100 px-3 py-1 text-sm" onClick={onClose}>
+          <button className="rounded-md bg-gray-100 px-3 py-1 text-sm" onClick={handleClose}>
             閉じる
           </button>
         </div>
@@ -167,13 +187,18 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
                 </span>
               )}
             </div>
-            {latestMeta.comment && <p className="text-sm leading-relaxed text-gray-800">{latestMeta.comment}</p>}
+            {latestMeta.comment && (
+              <p className="text-sm leading-relaxed text-gray-800">{latestMeta.comment}</p>
+            )}
           </div>
         )}
 
         {/* 詳細トグル */}
         <div className="mt-3">
-          <button className="text-sm text-blue-600 underline" onClick={() => setShowMore(v => !v)}>
+          <button
+            className="text-sm text-blue-600 underline"
+            onClick={() => setShowMore((v) => !v)}
+          >
             {showMore ? '詳細を閉じる' : '詳細を表示'}
           </button>
         </div>
@@ -181,7 +206,7 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
         {/* 詳細（緯度・経度・place_id は出さない） */}
         {showMore && (
           <div className="mt-3 space-y-1 rounded-lg border p-3">
-            <Row label="利用シーン" value={place.category} />
+            <Row label="利用シーン" value={current.category} />
             <Row label="価格帯" value={latestMeta.priceRange} />
             <Row label="人数" value={latestMeta.groupSize} />
             <Row label="個室" value={latestMeta.privateRoom} />
@@ -192,9 +217,9 @@ export default function PlaceDrawer({ open, place, onClose }: Props) {
         )}
 
         {/* 複数レビュー（2件目以降） */}
-        {place.reviews && place.reviews.length > 1 && (
+        {current.reviews && current.reviews.length > 1 && (
           <div className="mt-4 space-y-2">
-            {place.reviews.slice(1).map((r, i) => {
+            {current.reviews.slice(1).map((r, i) => {
               const m = toMeta(r);
               return (
                 <div key={i} className="rounded-md border p-2">
