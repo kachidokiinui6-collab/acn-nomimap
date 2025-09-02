@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-// ★ ここだけ修正：Map を別名に
 import { APIProvider, Map as GoogleMap, Marker } from '@vis.gl/react-google-maps';
 import PlaceSearchBar from '@/components/ui/PlaceSearchBar';
+import SubmitFormButton from '@/components/ui/SubmitFormButton';
 import { fetchAllPlaces } from '@/lib/api';
 import { AREA_PRESETS } from '@/lib/areaPresets';
 import { distanceKm } from '@/lib/geo';
@@ -23,10 +23,9 @@ const DEFAULT_COLOR = '#3b82f6';
 
 function colorForCategory(cat?: string) {
   const key = (cat ?? '').trim();
-  return CATEGORY_COLORS[key] ?? DEFAULT_COLOR; // ← フォールバックは DEFAULT_COLOR
+  return CATEGORY_COLORS[key] ?? DEFAULT_COLOR;
 }
 
-/** Google Maps Marker 用のカスタムSVGアイコンを生成 */
 function makePinIcon(hexColor: string) {
   const svg = encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
@@ -34,10 +33,7 @@ function makePinIcon(hexColor: string) {
       <circle cx="12" cy="8.5" r="2.5" fill="white"/>
     </svg>
   `);
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${svg}`,
-    // 型の都合を避けるため最小構成（スケールはブラウザに任せる）
-  } as any;
+  return { url: `data:image/svg+xml;charset=UTF-8,${svg}` } as any;
 }
 
 type Place = {
@@ -47,7 +43,7 @@ type Place = {
   url?: string;
   address?: string;
   adress?: string;
-  category?: string; // 利用シーン
+  category?: string;
   detail?: {
     genre?: string;
     rating?: string;
@@ -85,7 +81,7 @@ export default function GoogleMapView() {
     });
   }, []);
 
-  // ユニーク候補
+  // 絞り込み候補
   const { useCaseOptions, priceRangeOptions } = useMemo(() => {
     const uc = new Set<string>();
     const pr = new Set<string>();
@@ -100,7 +96,7 @@ export default function GoogleMapView() {
     };
   }, [allPlaces]);
 
-  // フィルタ
+  // フィルタ適用
   useEffect(() => {
     const res = allPlaces.filter((p) => {
       if (!p.lat || !p.lng) return false;
@@ -113,22 +109,21 @@ export default function GoogleMapView() {
       const okPrice =
         !filters.priceRange || filters.priceRange.length === 0 || filters.priceRange.some((v) => pr === norm(v));
 
-      const okArea =
-        !filters.areaPresetId
-          ? true
-          : (() => {
-              const preset = AREA_PRESETS.find((a) => a.id === filters.areaPresetId);
-              if (!preset) return true;
-              const dist = distanceKm({ lat: p.lat!, lng: p.lng! }, preset.center);
-              return dist <= preset.radiusKm;
-            })();
+      const okArea = !filters.areaPresetId
+        ? true
+        : (() => {
+            const preset = AREA_PRESETS.find((a) => a.id === filters.areaPresetId);
+            if (!preset) return true;
+            const dist = distanceKm({ lat: p.lat!, lng: p.lng! }, preset.center);
+            return dist <= preset.radiusKm;
+          })();
 
       return okUse && okPrice && okArea;
     });
     setFiltered(res);
   }, [filters, allPlaces]);
 
-  // ★ ここも衝突回避：組み込み Map を使う（globalThis.Map）
+  // マーカーアイコンキャッシュ
   const iconCache = useMemo(() => new globalThis.Map<string, any>(), []);
   const getIconForCategory = (cat?: string) => {
     const color = colorForCategory(cat);
@@ -151,9 +146,14 @@ export default function GoogleMapView() {
         onChange={setFilters}
       />
 
-      <div className="rounded-2xl overflow-hidden shadow">
+      {/* 地図ラッパを relative にして右上に絶対配置 */}
+      <div className="relative rounded-2xl overflow-hidden shadow">
+        {/* 右上の投稿ボタン（地図の上に重ねる） */}
+        <div className="absolute right-3 top-3 z-50">
+          <SubmitFormButton />
+        </div>
+
         <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''}>
-          {/* ★ ここも別名に変更 */}
           <GoogleMap
             defaultCenter={center}
             defaultZoom={12}
@@ -165,7 +165,7 @@ export default function GoogleMapView() {
               <Marker
                 key={`${p.name}-${i}`}
                 position={{ lat: p.lat!, lng: p.lng! }}
-                icon={getIconForCategory(p.category)}  // カテゴリ別カラー
+                icon={getIconForCategory(p.category)}
                 onClick={() => {
                   const g: PlaceGroup = {
                     name: p.name,
@@ -189,11 +189,7 @@ export default function GoogleMapView() {
         </APIProvider>
       </div>
 
-      <PlaceDrawer
-        open={!!active}
-        onOpenChange={(open) => { if (!open) setActive(null); }}
-        group={active}
-      />
+      <PlaceDrawer open={!!active} onOpenChange={(o) => !o && setActive(null)} group={active} />
     </div>
   );
 }
