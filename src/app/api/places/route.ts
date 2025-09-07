@@ -110,6 +110,7 @@ export async function GET() {
     const idxGenre      = headerMap('genre');
     const idxRating     = headerMap('rating');
     const idxComment    = headerMap('comment');
+    const idxReceipt   = headerMap('receipt') >= 0 ? headerMap('receipt') : headerMap('領収書対応');    
 
     const items = rows.map((r) => {
       const obj: RowObj = {};
@@ -155,7 +156,8 @@ export async function GET() {
           facilities:  idxFacilities >= 0 ? r[idxFacilities] : '',
           genre:       idxGenre >= 0 ? r[idxGenre] : '',
           rating:      idxRating >= 0 ? r[idxRating] : '',
-          comment:     idxComment >= 0 ? r[idxComment] : '',
+          comment:     idxComment >= 0 ? r[idxComment] : '',        
+          receipt:     idxReceipt >= 0 ? r[idxReceipt] : '',
         },
         raw: obj,
       };

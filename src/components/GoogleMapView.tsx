@@ -54,6 +54,7 @@ type Place = {
   adress?: string;
   category?: string; // 利用シーン
   detail?: {
+    receipt?: string;
     genre?: string;
     rating?: string | number;
     comment?: string;
@@ -296,6 +297,7 @@ function MapContent({
               rating: toRatingNumber(d.rating),
               genre: (d.genre ?? '').trim(),
               priceRange: (d.priceRange ?? '').trim(),
+              receipt: ((d as any).receipt ?? '').trim(),
               groupSize: (d as any).groupSize ?? '',
               privateRoom: (d as any).privateRoom ?? '',
               smoking: (d as any).smoking ?? '',

@@ -50,6 +50,7 @@ type ReviewMeta = {
   visitDate?: string;
   rating?: string | number;
   comment?: string;
+  receipt?: string;
   priceRange?: string;
   groupSize?: string;
   privateRoom?: string;
@@ -66,6 +67,7 @@ function toMeta(r?: Review): ReviewMeta {
     visitDate: pick(a, 'visitDate'),
     rating: pick(a, 'rating'),
     comment: pick(a, 'comment'),
+    receipt: pick(a, 'receipt'),
     priceRange: pick(a, 'priceRange'),
     groupSize: pick(a, 'groupSize'),
     privateRoom: pick(a, 'privateRoom'),
@@ -102,6 +104,7 @@ export default function PlaceDrawer({
     if (current?.category) arr.push(current.category); // 利用シーン
     if (latestMeta.priceRange) arr.push(`価格帯: ${latestMeta.priceRange}`);
     if (latestMeta.groupSize) arr.push(`人数: ${latestMeta.groupSize}`);
+    if (latestMeta.receipt) arr.push(`領収書対応: ${latestMeta.receipt}`);
     if (latestMeta.privateRoom) arr.push(`個室: ${latestMeta.privateRoom}`);
     if (latestMeta.smoking) arr.push(`喫煙: ${latestMeta.smoking}`);
     if (latestMeta.facilities) arr.push(`設備: ${latestMeta.facilities}`);
@@ -111,6 +114,7 @@ export default function PlaceDrawer({
     current?.category,
     latestMeta.priceRange,
     latestMeta.groupSize,
+    latestMeta.receipt,    
     latestMeta.privateRoom,
     latestMeta.smoking,
     latestMeta.facilities,
@@ -207,6 +211,7 @@ export default function PlaceDrawer({
         {showMore && (
           <div className="mt-3 space-y-1 rounded-lg border p-3">
             <Row label="利用シーン" value={current.category} />
+            <Row label="領収書対応" value={latestMeta.receipt} />
             <Row label="価格帯" value={latestMeta.priceRange} />
             <Row label="人数" value={latestMeta.groupSize} />
             <Row label="個室" value={latestMeta.privateRoom} />
