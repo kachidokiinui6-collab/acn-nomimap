@@ -1,18 +1,29 @@
 'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import GoogleMapView from "@/components/GoogleMapView";
+import { useMemo } from 'react';
+import { APIProvider } from '@vis.gl/react-google-maps';
+import GoogleMapView from '@/components/GoogleMapView';
 
 export default function Page() {
-  // もし何かのガードや初期化が必要ならここで
-  const router = useRouter();
-  const [ready, setReady] = useState(true);
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  const apiKey = useMemo(() => process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '', []);
+  if (!apiKey) {
+    return (
+      <div className="h-full w-full grid place-items-center p-6">
+        <div className="text-center space-y-3">
+          <h2 className="text-lg font-semibold">Google Maps API キーが未設定です</h2>
+          <p className="text-sm text-neutral-600">
+            .env.local に <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> を設定して開発サーバを再起動してください。
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  if (!ready) return null;
-
-  return <GoogleMapView />;
+  return (
+    <div className="h-full w-full">
+      <APIProvider apiKey={apiKey}>
+        <GoogleMapView className="h-full w-full" />
+      </APIProvider>
+    </div>
+  );
 }

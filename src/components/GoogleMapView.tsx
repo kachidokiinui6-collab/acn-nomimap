@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { APIProvider, Map as GoogleMap, Marker, useMap } from '@vis.gl/react-google-maps';
+import { Map as GoogleMap, Marker, useMap } from '@vis.gl/react-google-maps';
 import PlaceSearchBar from '@/components/ui/PlaceSearchBar';
 import SubmitFormButton from '@/components/ui/SubmitFormButton';
 import { fetchAllPlaces } from '@/lib/api';
@@ -10,18 +10,12 @@ import { distanceKm } from '@/lib/geo';
 import PlaceDrawer from '@/components/place/PlaceDrawer';
 import type { PlaceGroup } from '@/components/place/types';
 
-/* =========================
- *   表示・ズーム調整
- * ========================= */
 const DEFAULT_CENTER = { lat: 35.6809591, lng: 139.7673068 };
 const DEFAULT_ZOOM = 12;
 const VIEW_RADIUS_FACTOR = 0.8;
 const FIT_BOUNDS_PADDING_PX = 48;
 const EXTRA_ZOOM_STEPS = 2;
 
-/* =========================
- *   配色 & SVG ピン生成
- * ========================= */
 const CATEGORY_COLORS: Record<string, string> = {
   '普段飲み': '#22c55e',
   'クライアント飲み': '#0ea5e9',
@@ -42,7 +36,7 @@ function makePinIcon(hexColor: string) {
       <circle cx="12" cy="8.5" r="2.5" fill="white"/>
     </svg>
   `);
-  return { url: `data:image/svg+xml;charset=UTF-8,${svg}` } as any;
+  return { url: `data:image/svg+xml;charset=UTF-8,${svg}` } as google.maps.Icon;
 }
 
 type Place = {
@@ -52,14 +46,13 @@ type Place = {
   url?: string;
   address?: string;
   adress?: string;
-  category?: string; // 利用シーン
+  category?: string;
   detail?: {
     receipt?: string;
     genre?: string;
     rating?: string | number;
     comment?: string;
     priceRange?: string;
-    // ある場合だけ拾う（シート次第）
     groupSize?: string;
     privateRoom?: string;
     smoking?: string;
@@ -74,66 +67,81 @@ type Filters = {
   areaPresetId?: (typeof AREA_PRESETS)[number]['id'] | null;
 };
 
+type GoogleMapViewProps = { className?: string };
+
 function norm(s?: string) {
   return (s ?? '').trim().toLowerCase();
 }
 
-/* rating を 0..5 の number に正規化 */
 function toRatingNumber(raw?: string | number | null): number | undefined {
   if (raw == null) return undefined;
   if (typeof raw === 'number') return Math.max(0, Math.min(5, raw));
   const s = String(raw).trim();
   if (!s) return undefined;
-
   const stars = s.match(/★/g);
   if (stars?.length) return Math.min(5, stars.length);
-
   const slash = s.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
   if (slash) {
     const num = parseFloat(slash[1]);
     const den = parseFloat(slash[2]);
     if (den > 0) return Math.max(0, Math.min(5, (num / den) * 5));
   }
-
   const num = Number(s.replace(/[^0-9.]/g, ''));
   return Number.isFinite(num) ? Math.max(0, Math.min(5, num)) : undefined;
 }
 
-export default function GoogleMapView() {
+export default function GoogleMapView({ className = '' }: GoogleMapViewProps) {
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [filtered, setFiltered] = useState<Place[]>([]);
   const [active, setActive] = useState<PlaceGroup | null>(null);
   const [filters, setFilters] = useState<Filters>({ areaPresetId: null, useCase: [], priceRange: [] });
 
-  // モバイル安全なvh
+  // デバッグ用
+  const [status, setStatus] = useState<{ containerHasHeight: boolean; googleLoaded: boolean; lastError?: string }>({
+    containerHasHeight: false,
+    googleLoaded: false,
+  });
+
+  // コンテナ高さチェック
   useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    const el = document.getElementById('map-root');
+    const tick = () => {
+      const hasHeight = !!el && el.clientHeight > 0 && el.clientWidth > 0;
+      setStatus((s) => ({ ...s, containerHasHeight: hasHeight }));
     };
-    setVH();
-    window.addEventListener('resize', setVH);
-    window.addEventListener('orientationchange', setVH);
-    return () => {
-      window.removeEventListener('resize', setVH);
-      window.removeEventListener('orientationchange', setVH);
-    };
+    tick();
+    const obs = new ResizeObserver(tick);
+    if (el) obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
-  // 初回ロード
+  // Google JS ロード確認
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const ok = !!(globalThis as any).google?.maps;
+      setStatus((s) => ({ ...s, googleLoaded: ok }));
+      if (ok) window.clearInterval(t);
+    }, 300);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // データ
   useEffect(() => {
     (async () => {
-      const { places } = await fetchAllPlaces();
-      setAllPlaces(places);
-      setFiltered(places);
-    })().catch((e) => {
-      console.error(e);
-      setAllPlaces([]);
-      setFiltered([]);
-    });
+      try {
+        const { places } = await fetchAllPlaces();
+        setAllPlaces(places);
+        setFiltered(places);
+      } catch (e: any) {
+        console.error(e);
+        setStatus((s) => ({ ...s, lastError: String(e?.message || e) }));
+        setAllPlaces([]);
+        setFiltered([]);
+      }
+    })();
   }, []);
 
-  // ユニーク候補
+  // 選択肢
   const { useCaseOptions, priceRangeOptions } = useMemo(() => {
     const uc = new Set<string>();
     const pr = new Set<string>();
@@ -148,7 +156,7 @@ export default function GoogleMapView() {
     };
   }, [allPlaces]);
 
-  // フィルタ適用
+  // フィルタ
   useEffect(() => {
     const res = allPlaces.filter((p) => {
       if (!p.lat || !p.lng) return false;
@@ -156,10 +164,8 @@ export default function GoogleMapView() {
       const uc = norm(p.category);
       const pr = norm(d.priceRange);
 
-      const okUse =
-        !filters.useCase || filters.useCase.length === 0 || filters.useCase.some((u) => uc === norm(u));
-      const okPrice =
-        !filters.priceRange || filters.priceRange.length === 0 || filters.priceRange.some((v) => pr === norm(v));
+      const okUse = !filters.useCase?.length || filters.useCase.some((u) => uc === norm(u));
+      const okPrice = !filters.priceRange?.length || filters.priceRange.some((v) => pr === norm(v));
 
       const okArea = !filters.areaPresetId
         ? true
@@ -176,9 +182,9 @@ export default function GoogleMapView() {
   }, [filters, allPlaces]);
 
   return (
-    <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col">
+    <div className={`flex min-h-0 h-full w-full flex-col ${className}`}>
       {/* 上段：検索UI */}
-      <div className="p-3 pb-2">
+      <div className="px-3 pt-2 pb-1">
         <PlaceSearchBar
           useCaseOptions={useCaseOptions}
           priceRangeOptions={priceRangeOptions}
@@ -188,26 +194,24 @@ export default function GoogleMapView() {
       </div>
 
       {/* 下段：MAP */}
-      <div className="relative grow rounded-t-2xl overflow-hidden shadow">
+      <div
+        id="map-root"
+        className="relative flex-1 min-h-0 rounded-t-2xl overflow-hidden shadow"
+        style={{ minHeight: 360 }}
+      >
         <div className="absolute right-3 top-3 z-50 pointer-events-auto">
           <SubmitFormButton />
         </div>
 
-        <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''}>
-          <GoogleMap
-            defaultCenter={DEFAULT_CENTER}
-            defaultZoom={DEFAULT_ZOOM}
-            gestureHandling="greedy"
-            disableDefaultUI
-            className="absolute inset-0 h-full w-full"
-          >
-            <MapContent
-              filtered={filtered}
-              filters={filters}
-              onPick={(g) => setActive(g)}
-            />
-          </GoogleMap>
-        </APIProvider>
+        <GoogleMap
+          defaultCenter={DEFAULT_CENTER}
+          defaultZoom={DEFAULT_ZOOM}
+          gestureHandling="greedy"
+          disableDefaultUI
+          className="absolute inset-0 h-full w-full"
+        >
+          <MapContent filtered={filtered} filters={filters} onPick={(g) => setActive(g)} />
+        </GoogleMap>
       </div>
 
       <PlaceDrawer open={!!active} onOpenChange={(o) => !o && setActive(null)} group={active} />
@@ -215,7 +219,6 @@ export default function GoogleMapView() {
   );
 }
 
-/** Map の子として配置し、useMap() でインスタンスを取得 */
 function MapContent({
   filtered,
   filters,
@@ -227,8 +230,8 @@ function MapContent({
 }) {
   const map = useMap();
 
-  // マーカー用アイコンキャッシュ
-  const iconCache = useMemo(() => new Map<string, any>(), []);
+  // マーカーアイコンキャッシュ
+  const iconCache = useMemo(() => new Map<string, google.maps.Icon>(), []);
   const getIconForCategory = (cat?: string) => {
     const color = colorForCategory(cat);
     const key = `pin:${color}`;
@@ -247,7 +250,7 @@ function MapContent({
       ? AREA_PRESETS.find((a) => a.id === filters.areaPresetId)
       : undefined;
 
-    const m = map as any;
+    const m = map as google.maps.Map;
 
     if (!preset) {
       m.setZoom(DEFAULT_ZOOM);
@@ -271,7 +274,9 @@ function MapContent({
 
       if (EXTRA_ZOOM_STEPS > 0) {
         g.maps.event.addListenerOnce(m, 'idle', () => {
-          const current = typeof m.getZoom === 'function' ? m.getZoom() : DEFAULT_ZOOM;
+          // === ここを“安全に数値化”して TS を黙らせる ===
+          const z = typeof m.getZoom === 'function' ? m.getZoom() : undefined;
+          const current = (typeof z === 'number' && Number.isFinite(z)) ? z : DEFAULT_ZOOM;
           const next = Math.min(current + EXTRA_ZOOM_STEPS, 20);
           m.setZoom(next);
         });
@@ -310,8 +315,8 @@ function MapContent({
               lat: p.lat!,
               lng: p.lng!,
               url: p.url,
-              address: p.address ?? p.adress,      // Drawerが使う可能性あり
-              category: p.category ?? undefined,   // 利用シーンはグループ直下にも
+              address: p.address ?? p.adress,
+              category: p.category ?? undefined,
               reviews: [review],
             } as any;
 
