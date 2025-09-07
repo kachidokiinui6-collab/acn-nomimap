@@ -77,6 +77,21 @@ export default function GoogleMapView() {
   const [active, setActive] = useState<PlaceGroup | null>(null);
   const [filters, setFilters] = useState<Filters>({ areaPresetId: null, useCase: [], priceRange: [] });
 
+  // --- 追加: モバイル安全なvhを設定（iOS Safariのアドレスバー変動対策） ---
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    setVH();
+    window.addEventListener('resize', setVH);
+    window.addEventListener('orientationchange', setVH);
+    return () => {
+      window.removeEventListener('resize', setVH);
+      window.removeEventListener('orientationchange', setVH);
+    };
+  }, []);
+
   // 初回ロード
   useEffect(() => {
     (async () => {
@@ -133,28 +148,33 @@ export default function GoogleMapView() {
   }, [filters, allPlaces]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <PlaceSearchBar
-        useCaseOptions={useCaseOptions}
-        priceRangeOptions={priceRangeOptions}
-        value={filters}
-        onChange={setFilters}
-      />
+    // 画面全体を縦フレックス。--vh を使って“見えている高さ100%”
+    <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col">
+      {/* 上段：検索UI（自然高さ） */}
+      <div className="p-3 pb-2">
+        <PlaceSearchBar
+          useCaseOptions={useCaseOptions}
+          priceRangeOptions={priceRangeOptions}
+          value={filters}
+          onChange={setFilters}
+        />
+      </div>
 
-      {/* 地図ラッパ */}
-      <div className="relative rounded-2xl overflow-hidden shadow">
+      {/* 下段：MAP（残り全体を埋める） */}
+      <div className="relative grow rounded-t-2xl overflow-hidden shadow">
         {/* 右上の投稿ボタン（地図の上に重ねる） */}
         <div className="absolute right-3 top-3 z-50 pointer-events-auto">
           <SubmitFormButton />
         </div>
 
         <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''}>
+          {/* 親の grow に合わせて全面化 */}
           <GoogleMap
             defaultCenter={DEFAULT_CENTER}
             defaultZoom={DEFAULT_ZOOM}
             gestureHandling="greedy"
             disableDefaultUI
-            className="h-[70vh] w-full"
+            className="absolute inset-0 h-full w-full"
           >
             <MapContent
               filtered={filtered}
@@ -165,6 +185,7 @@ export default function GoogleMapView() {
         </APIProvider>
       </div>
 
+      {/* Drawer は最下段の外側に */}
       <PlaceDrawer open={!!active} onOpenChange={(o) => !o && setActive(null)} group={active} />
     </div>
   );
@@ -202,7 +223,6 @@ function MapContent({
       ? AREA_PRESETS.find((a) => a.id === filters.areaPresetId)
       : undefined;
 
-    // 非null確定のローカルに退避して、コールバックでも使う
     const m = map as any;
 
     if (!preset) {
@@ -215,9 +235,7 @@ function MapContent({
     const g = (globalThis as any).google;
 
     if (g?.maps) {
-      // 表示専用に半径を絞る → より寄る
       const viewRadiusKm = radiusKm * VIEW_RADIUS_FACTOR;
-
       const KM_PER_DEG_LAT = 111.32;
       const dLat = viewRadiusKm / KM_PER_DEG_LAT;
       const dLng = viewRadiusKm / (KM_PER_DEG_LAT * Math.cos((center.lat * Math.PI) / 180));
@@ -227,7 +245,6 @@ function MapContent({
 
       m.fitBounds(bounds, FIT_BOUNDS_PADDING_PX);
 
-      // さらに 1〜2 段ズーム（任意）
       if (EXTRA_ZOOM_STEPS > 0) {
         g.maps.event.addListenerOnce(m, 'idle', () => {
           const current = typeof m.getZoom === 'function' ? m.getZoom() : DEFAULT_ZOOM;
@@ -236,7 +253,6 @@ function MapContent({
         });
       }
     } else {
-      // フォールバック時も少し寄る
       m.setZoom(15);
       m.panTo(center);
     }
@@ -250,7 +266,6 @@ function MapContent({
           position={{ lat: p.lat!, lng: p.lng! }}
           icon={getIconForCategory(p.category)}
           onClick={() => {
-            // フォーカスはしない。Drawer 用の選択のみ。
             const g: PlaceGroup = {
               name: p.name,
               lat: p.lat!,
