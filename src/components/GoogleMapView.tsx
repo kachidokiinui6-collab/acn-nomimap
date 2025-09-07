@@ -11,13 +11,13 @@ import PlaceDrawer from '@/components/place/PlaceDrawer';
 import type { PlaceGroup } from '@/components/place/types';
 
 /* =========================
- *   表示・ズーム調整（必要に応じてここだけ変えればOK）
+ *   表示・ズーム調整
  * ========================= */
 const DEFAULT_CENTER = { lat: 35.6809591, lng: 139.7673068 };
 const DEFAULT_ZOOM = 12;
-const VIEW_RADIUS_FACTOR = 0.8;     // 小さいほど寄る（0.4〜0.7 推奨）
-const FIT_BOUNDS_PADDING_PX = 48;   // 余白px（小さいほど寄る）
-const EXTRA_ZOOM_STEPS = 2;         // fitBounds後に更に寄せる段数（0〜2）
+const VIEW_RADIUS_FACTOR = 0.8;
+const FIT_BOUNDS_PADDING_PX = 48;
+const EXTRA_ZOOM_STEPS = 2;
 
 /* =========================
  *   配色 & SVG ピン生成
@@ -55,9 +55,15 @@ type Place = {
   category?: string; // 利用シーン
   detail?: {
     genre?: string;
-    rating?: string;
+    rating?: string | number;
     comment?: string;
     priceRange?: string;
+    // ある場合だけ拾う（シート次第）
+    groupSize?: string;
+    privateRoom?: string;
+    smoking?: string;
+    facilities?: string;
+    visitDate?: string;
   };
 };
 
@@ -71,13 +77,34 @@ function norm(s?: string) {
   return (s ?? '').trim().toLowerCase();
 }
 
+/* rating を 0..5 の number に正規化 */
+function toRatingNumber(raw?: string | number | null): number | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === 'number') return Math.max(0, Math.min(5, raw));
+  const s = String(raw).trim();
+  if (!s) return undefined;
+
+  const stars = s.match(/★/g);
+  if (stars?.length) return Math.min(5, stars.length);
+
+  const slash = s.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+  if (slash) {
+    const num = parseFloat(slash[1]);
+    const den = parseFloat(slash[2]);
+    if (den > 0) return Math.max(0, Math.min(5, (num / den) * 5));
+  }
+
+  const num = Number(s.replace(/[^0-9.]/g, ''));
+  return Number.isFinite(num) ? Math.max(0, Math.min(5, num)) : undefined;
+}
+
 export default function GoogleMapView() {
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [filtered, setFiltered] = useState<Place[]>([]);
   const [active, setActive] = useState<PlaceGroup | null>(null);
   const [filters, setFilters] = useState<Filters>({ areaPresetId: null, useCase: [], priceRange: [] });
 
-  // --- 追加: モバイル安全なvhを設定（iOS Safariのアドレスバー変動対策） ---
+  // モバイル安全なvh
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
@@ -120,7 +147,7 @@ export default function GoogleMapView() {
     };
   }, [allPlaces]);
 
-  // フィルタ適用（プリセット円内かつ条件一致）
+  // フィルタ適用
   useEffect(() => {
     const res = allPlaces.filter((p) => {
       if (!p.lat || !p.lng) return false;
@@ -148,9 +175,8 @@ export default function GoogleMapView() {
   }, [filters, allPlaces]);
 
   return (
-    // 画面全体を縦フレックス。--vh を使って“見えている高さ100%”
     <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col">
-      {/* 上段：検索UI（自然高さ） */}
+      {/* 上段：検索UI */}
       <div className="p-3 pb-2">
         <PlaceSearchBar
           useCaseOptions={useCaseOptions}
@@ -160,15 +186,13 @@ export default function GoogleMapView() {
         />
       </div>
 
-      {/* 下段：MAP（残り全体を埋める） */}
+      {/* 下段：MAP */}
       <div className="relative grow rounded-t-2xl overflow-hidden shadow">
-        {/* 右上の投稿ボタン（地図の上に重ねる） */}
         <div className="absolute right-3 top-3 z-50 pointer-events-auto">
           <SubmitFormButton />
         </div>
 
         <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''}>
-          {/* 親の grow に合わせて全面化 */}
           <GoogleMap
             defaultCenter={DEFAULT_CENTER}
             defaultZoom={DEFAULT_ZOOM}
@@ -185,7 +209,6 @@ export default function GoogleMapView() {
         </APIProvider>
       </div>
 
-      {/* Drawer は最下段の外側に */}
       <PlaceDrawer open={!!active} onOpenChange={(o) => !o && setActive(null)} group={active} />
     </div>
   );
@@ -215,7 +238,7 @@ function MapContent({
     return icon;
   };
 
-  // プリセット選択時のみフォーカス（ピン選択ではフォーカスしない）
+  // プリセット選択時のみフォーカス
   useEffect(() => {
     if (!map) return;
 
@@ -266,20 +289,30 @@ function MapContent({
           position={{ lat: p.lat!, lng: p.lng! }}
           icon={getIconForCategory(p.category)}
           onClick={() => {
+            const d = p.detail ?? {};
+            const review = {
+              handlename: p.category ?? '',
+              comment: (d.comment ?? '').trim(),
+              rating: toRatingNumber(d.rating),
+              genre: (d.genre ?? '').trim(),
+              priceRange: (d.priceRange ?? '').trim(),
+              groupSize: (d as any).groupSize ?? '',
+              privateRoom: (d as any).privateRoom ?? '',
+              smoking: (d as any).smoking ?? '',
+              facilities: (d as any).facilities ?? '',
+              visitDate: (d as any).visitDate ?? '',
+            };
+
             const g: PlaceGroup = {
               name: p.name,
               lat: p.lat!,
               lng: p.lng!,
               url: p.url,
-              reviews: [
-                {
-                  handlename: p.category ?? '',
-                  comment: p.detail?.comment ?? '',
-                  rating: p.detail?.rating ?? '',
-                  genre: p.detail?.genre ?? '',
-                },
-              ],
-            };
+              address: p.address ?? p.adress,      // Drawerが使う可能性あり
+              category: p.category ?? undefined,   // 利用シーンはグループ直下にも
+              reviews: [review],
+            } as any;
+
             onPick(g);
           }}
         />
