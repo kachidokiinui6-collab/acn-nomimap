@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         {/* 行2: メイン（残り全部）。ここでスクロールしないように hidden */}
-        <main className="h-[calc(100vh-80px)] w-full box-border overflow-hidden flex flex-col px-3 pt-1 md:pt-2">
+        <main className="h-[calc(100vh-100px)] w-full box-border overflow-hidden flex flex-col px-3 pt-1 md:pt-2">
           <div className="flex-1 min-h-0 h-full">{children}</div>
         </main>
       </body>
